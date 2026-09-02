@@ -36,11 +36,15 @@ jobs:
           const url = 'https://mariopablicoseo.github.io/serphic-preview/';
           const results = { url, assertions: [], consoleErrors: [], pageErrors: [], desktop: {}, mobile: {} };
           const add = (name, pass, actual, expected) => results.assertions.push({ name, pass, actual, expected });
+          const lightColor = value => {
+            const m = String(value).match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+            return !!m && Number(m[1]) >= 230 && Number(m[2]) >= 230 && Number(m[3]) >= 230;
+          };
 
           async function inspect(page, label) {
             const data = await page.evaluate(() => {
-              const one = (s) => document.querySelector(s);
-              const all = (s) => [...document.querySelectorAll(s)];
+              const one = s => document.querySelector(s);
+              const all = s => [...document.querySelectorAll(s)];
               const cs = (s, pseudo) => {
                 const el = typeof s === 'string' ? one(s) : s;
                 if (!el) return null;
@@ -48,12 +52,12 @@ jobs:
                 return {
                   color: st.color,
                   backgroundColor: st.backgroundColor,
+                  backgroundImage: st.backgroundImage,
                   borderColor: st.borderColor,
                   borderWidth: st.borderWidth,
                   borderRadius: st.borderRadius,
                   padding: st.padding,
-                  paddingTop: st.paddingTop,
-                  paddingBottom: st.paddingBottom,
+                  gap: st.gap,
                   minHeight: st.minHeight,
                   height: st.height,
                   display: st.display,
@@ -73,29 +77,31 @@ jobs:
                 heroNodes: all('.network-node').length,
                 heroNodeSvgs: all('.network-node svg').length,
                 heroNetwork: cs('.hero-network'),
-                reviewIconSvgs: all('.review-icon svg').length,
+                reviewIconSvgs: all('#review-icon svg').length,
                 workspaceCount: all('.workspace').length,
                 workspace: cs('.workspace'),
                 workspaceBefore: cs('.workspace','::before'),
                 workspaceStage: cs('.workspace-stage'),
                 workspacePanels: all('.workspace .workspace-copy, .workspace .workspace-visual').length,
                 mapTransform: cs('.map-grid')?.transform,
-                nav: cs('.navbar'),
                 primaryButton: cs('.button.primary'),
-                priceCard: cs('#pricing .price-card'),
-                priceFeatured: cs('#pricing .price-card.featured'),
-                body: cs('body'),
-                h1: cs('h1'),
                 processRows: all('#process .sequence-row').length,
                 founderCards: all('#about .profile-card,#about .founder-work-card').length,
                 reviewTabs: all('#review [data-review]').length,
                 focusTabs: all('#industries [data-focus]').length,
                 systemCards: all('#system .system-card').length,
+                systemCard: cs('#system .system-card'),
+                illustrationWell: cs('#system .illustration-well'),
+                systemSection: cs('#system'),
                 proofMetrics: all('#results .metric').length,
-                faqItems: all('.faq-item').length,
-                sectionStyle: cs('#system'),
-                navBrandText: one('.brand')?.textContent?.trim() || '',
-                navBrandHasImage: !!one('.brand img'),
+                metricsShell: cs('#results .metrics-shell'),
+                metricCard: cs('#results .metric'),
+                faqItems: all('.faq-list details').length,
+                faqList: cs('.faq-list'),
+                faqDetail: cs('.faq-list details'),
+                finalCard: cs('.final-card'),
+                body: cs('body'),
+                h1: cs('h1'),
               };
             });
             results[label] = data;
@@ -113,7 +119,12 @@ jobs:
             for (let i = 0; i < 30; i++) {
               await page.goto(url, { waitUntil: 'networkidle', timeout: 45000 });
               await page.waitForTimeout(900);
-              ready = await page.evaluate(() => document.querySelectorAll('#pricing .price-card').length === 3 && document.querySelectorAll('.network-node svg').length === 8);
+              ready = await page.evaluate(() => {
+                const finalCard = document.querySelector('.final-card');
+                return document.querySelectorAll('#pricing .price-card').length === 3 &&
+                  document.querySelectorAll('.network-node svg').length === 8 &&
+                  finalCard && getComputedStyle(finalCard).borderRadius === '28px';
+              });
               if (ready) break;
               await page.waitForTimeout(5000);
             }
@@ -121,33 +132,33 @@ jobs:
             const desktop = await inspect(page, 'desktop');
             await page.screenshot({ path: 'serphic-desktop.png', fullPage: true });
 
-            add('Corrected preview loaded', ready, { pricingCards: desktop.pricingCards, heroNodeSvgs: desktop.heroNodeSvgs }, '3 pricing cards and 8 hero SVGs');
+            add('Latest parity layer deployed', ready, { pricingCards: desktop.pricingCards, heroNodeSvgs: desktop.heroNodeSvgs, finalRadius: desktop.finalCard?.borderRadius }, '3 pricing cards, 8 hero SVGs, 28px final CTA');
             add('Page title', desktop.title === 'SEO for Plumbing & HVAC Companies | Serphic', desktop.title, 'SEO for Plumbing & HVAC Companies | Serphic');
             add('No horizontal desktop overflow', desktop.viewport.scrollWidth <= desktop.viewport.width + 1, desktop.viewport, 'scrollWidth <= viewport width');
-            add('Headings use light text', desktop.headingColors.every(c => c === 'rgb(247, 247, 248)' || c === 'rgb(247, 249, 250)'), [...new Set(desktop.headingColors)], 'light Serphic heading color');
-            add('Three pricing cards', desktop.pricingCards === 3, desktop.pricingCards, 3);
-            add('No pricing comparison rows', desktop.pricingRows === 0, desktop.pricingRows, 0);
-            add('Eight hero nodes', desktop.heroNodes === 8, desktop.heroNodes, 8);
-            add('Eight SVG hero icons', desktop.heroNodeSvgs === 8, desktop.heroNodeSvgs, 8);
-            add('Hero illustration is unboxed', desktop.heroNetwork?.borderWidth === '0px' && desktop.heroNetwork?.backgroundColor === 'rgba(0, 0, 0, 0)', desktop.heroNetwork, '0px border and transparent background');
-            add('Two workspace shells', desktop.workspaceCount === 2, desktop.workspaceCount, 2);
-            add('Workspace outer border 1px', desktop.workspace?.borderWidth === '1px', desktop.workspace?.borderWidth, '1px');
-            add('Workspace outer radius 18px', desktop.workspace?.borderRadius === '18px', desktop.workspace?.borderRadius, '18px');
-            add('Workspace padding 12px', desktop.workspace?.padding === '12px', desktop.workspace?.padding, '12px');
-            add('Workspace pseudo-frame removed', desktop.workspaceBefore?.display === 'none' || desktop.workspaceBefore?.content === 'none', desktop.workspaceBefore, 'display none/content none');
-            add('Workspace stage has no extra border', desktop.workspaceStage?.borderWidth === '0px', desktop.workspaceStage?.borderWidth, '0px');
-            add('Four real workspace panels total', desktop.workspacePanels === 4, desktop.workspacePanels, 4);
-            add('Maps grid is straight', desktop.mapTransform === 'none' || desktop.mapTransform === 'matrix(1, 0, 0, 1, 0, 0)', desktop.mapTransform, 'none');
+            add('All headings are light', desktop.headingColors.every(lightColor), [...new Set(desktop.headingColors)], 'all RGB channels >= 230');
+            add('Three pricing cards', desktop.pricingCards === 3 && desktop.pricingRows === 0, {cards:desktop.pricingCards,rows:desktop.pricingRows}, '3 cards / 0 rows');
+            add('Eight SVG hero icons', desktop.heroNodes === 8 && desktop.heroNodeSvgs === 8, {nodes:desktop.heroNodes,svgs:desktop.heroNodeSvgs}, '8 / 8');
+            add('Hero illustration unboxed', desktop.heroNetwork?.borderWidth === '0px' && desktop.heroNetwork?.backgroundColor === 'rgba(0, 0, 0, 0)', desktop.heroNetwork, '0px border / transparent');
+            add('Two real workspace shells', desktop.workspaceCount === 2, desktop.workspaceCount, 2);
+            add('Workspace outer outline locked', desktop.workspace?.borderWidth === '1px' && desktop.workspace?.borderRadius === '18px' && desktop.workspace?.padding === '12px', desktop.workspace, '1px / 18px / 12px');
+            add('No extra workspace pseudo-frame', desktop.workspaceBefore?.display === 'none' && desktop.workspaceStage?.borderWidth === '0px', {before:desktop.workspaceBefore,stage:desktop.workspaceStage}, 'pseudo none / stage border 0');
+            add('Four real workspace panels', desktop.workspacePanels === 4, desktop.workspacePanels, 4);
+            add('Maps grid straight', desktop.mapTransform === 'none' || desktop.mapTransform === 'matrix(1, 0, 0, 1, 0, 0)', desktop.mapTransform, 'none');
             add('Five 90-day rows', desktop.processRows === 5, desktop.processRows, 5);
             add('Two founder cards', desktop.founderCards === 2, desktop.founderCards, 2);
-            add('Five Search Review tabs', desktop.reviewTabs === 5, desktop.reviewTabs, 5);
+            add('Five review tabs', desktop.reviewTabs === 5, desktop.reviewTabs, 5);
+            add('Review SVG icon restored', desktop.reviewIconSvgs >= 1, desktop.reviewIconSvgs, '>= 1');
             add('Two industry tabs', desktop.focusTabs === 2, desktop.focusTabs, 2);
             add('Three operating-system cards', desktop.systemCards === 3, desktop.systemCards, 3);
+            add('Operating-system proportions', desktop.systemCard?.minHeight === '500px' && desktop.illustrationWell?.height === '230px', {card:desktop.systemCard,well:desktop.illustrationWell}, '500px card / 230px well');
+            add('System section source background', desktop.systemSection?.backgroundColor === 'rgb(9, 12, 13)', desktop.systemSection?.backgroundColor, 'rgb(9, 12, 13)');
             add('Three proof metrics', desktop.proofMetrics === 3, desktop.proofMetrics, 3);
-            add('Six FAQ items', desktop.faqItems === 6, desktop.faqItems, 6);
+            add('Evidence shell uses card gaps', desktop.metricsShell?.padding === '10px' && desktop.metricsShell?.gap === '12px' && desktop.metricCard?.borderRadius === '14px', {shell:desktop.metricsShell,metric:desktop.metricCard}, '10px padding / 12px gap / 14px cards');
+            add('Six FAQ rows', desktop.faqItems === 6, desktop.faqItems, 6);
+            add('FAQ uses divider treatment', desktop.faqDetail?.borderRadius === '0px', desktop.faqDetail, '0px radius');
+            add('Final CTA source treatment', desktop.finalCard?.borderRadius === '28px' && desktop.finalCard?.color === 'rgb(6, 16, 15)' && /linear-gradient/.test(desktop.finalCard?.backgroundImage || ''), desktop.finalCard, '28px bright source CTA with dark text');
             add('Plus Jakarta body font', /Plus Jakarta Sans/i.test(desktop.body?.fontFamily || ''), desktop.body?.fontFamily, 'Plus Jakarta Sans');
-            add('Primary control radius 10px', desktop.primaryButton?.borderRadius === '10px', desktop.primaryButton?.borderRadius, '10px');
-            add('Primary control is at least 40px', parseFloat(desktop.primaryButton?.height || '0') >= 40, desktop.primaryButton?.height, '>= 40px');
+            add('Primary control locked', desktop.primaryButton?.borderRadius === '10px' && parseFloat(desktop.primaryButton?.height || '0') >= 40, desktop.primaryButton, '10px radius / >=40px');
             add('No page errors', results.pageErrors.length === 0, results.pageErrors, []);
 
             await page.setViewportSize({ width: 390, height: 844 });
@@ -159,15 +170,13 @@ jobs:
             add('Mobile retains three pricing cards', mobile.pricingCards === 3, mobile.pricingCards, 3);
             add('Mobile retains two workspaces', mobile.workspaceCount === 2, mobile.workspaceCount, 2);
             add('Mobile workspace padding 10px', mobile.workspace?.padding === '10px', mobile.workspace?.padding, '10px');
+            add('Mobile final CTA source radius', mobile.finalCard?.borderRadius === '22px', mobile.finalCard?.borderRadius, '22px');
 
             fs.writeFileSync('qa-results.json', JSON.stringify(results, null, 2));
             console.log(JSON.stringify(results, null, 2));
             await browser.close();
             if (results.assertions.some(a => !a.pass)) process.exitCode = 1;
-          })().catch(err => {
-            console.error(err);
-            process.exit(1);
-          });
+          })().catch(err => { console.error(err); process.exit(1); });
           EOF
           node qa.cjs
 
