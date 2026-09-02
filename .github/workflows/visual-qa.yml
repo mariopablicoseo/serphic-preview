@@ -83,10 +83,10 @@ jobs:
             add('90 days + founder structure',d.processRows===5&&d.founderCards===2,{process:d.processRows,founder:d.founderCards},'5 / 2');
             add('Review + focus tabs intact',d.reviewTabs===5&&d.reviewIcon>=1&&d.focusTabs===2,{review:d.reviewTabs,icon:d.reviewIcon,focus:d.focusTabs},'5 / >=1 / 2');
             add('Operating System source proportions',d.systemCards===3&&d.systemCard?.minHeight==='500px'&&d.well?.height==='230px'&&d.system?.backgroundColor==='rgb(9, 12, 13)',{cards:d.systemCards,card:d.systemCard,well:d.well,section:d.system},'3 / 500px / 230px / source background');
-            add('Evidence shell restored',d.metrics===3&&d.metricsShell?.padding==='10px'&&d.metricsShell?.gap==='12px'&&d.metric?.borderRadius==='14px',{metrics:d.metrics,shell:d.metricsShell,metric:d.metric},'3 / 10px / 12px / 14px');
+            add('Evidence shell restored',d.metrics===3&&d.metricsShell?.padding==='12px'&&d.metricsShell?.gap==='12px'&&d.metric?.borderRadius==='14px',{metrics:d.metrics,shell:d.metricsShell,metric:d.metric},'3 / 12px / 12px / 14px');
             add('FAQ divider accordion restored',d.faq===6&&d.faqRow?.borderRadius==='0px',{rows:d.faq,row:d.faqRow},'6 / 0px');
             add('Source final CTA restored',d.finalCard?.borderRadius==='28px'&&d.finalCard?.color==='rgb(6, 16, 15)'&&/linear-gradient/.test(d.finalCard?.backgroundImage||''),d.finalCard,'bright source CTA');
-            add('Canonical controls restored',d.button?.borderRadius==='10px'&&parseFloat(d.button?.height||0)>=40,d.button,'10px / >=40px');
+            add('Canonical controls restored',d.button?.borderRadius==='10px'&&parseFloat(d.button?.height||0)>=44,d.button,'10px / >=44px');
             add('Correct body font',/Plus Jakarta Sans/i.test(d.body?.fontFamily||''),d.body?.fontFamily,'Plus Jakarta Sans');
             add('No runtime errors',out.pageErrors.length===0,out.pageErrors,[]);
             await page.setViewportSize({width:390,height:844}); await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(800);
