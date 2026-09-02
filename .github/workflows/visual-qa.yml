@@ -1,0 +1,164 @@
+name: Serphic visual QA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  visual-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Playwright
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+
+      - name: Run live preview QA
+        run: |
+          cat > /tmp/qa.cjs <<'EOF'
+          const { chromium } = require('playwright');
+          const fs = require('fs');
+
+          const url = 'https://mariopablicoseo.github.io/serphic-preview/';
+          const results = { url, assertions: [], consoleErrors: [], pageErrors: [], desktop: {}, mobile: {} };
+          const add = (name, pass, actual, expected) => results.assertions.push({ name, pass, actual, expected });
+
+          async function inspect(page, label) {
+            const data = await page.evaluate(() => {
+              const one = (s) => document.querySelector(s);
+              const all = (s) => [...document.querySelectorAll(s)];
+              const cs = (s, pseudo) => {
+                const el = typeof s === 'string' ? one(s) : s;
+                if (!el) return null;
+                const st = getComputedStyle(el, pseudo);
+                return {
+                  color: st.color,
+                  backgroundColor: st.backgroundColor,
+                  borderColor: st.borderColor,
+                  borderWidth: st.borderWidth,
+                  borderRadius: st.borderRadius,
+                  padding: st.padding,
+                  minHeight: st.minHeight,
+                  height: st.height,
+                  display: st.display,
+                  content: st.content,
+                  transform: st.transform,
+                  boxShadow: st.boxShadow,
+                  fontFamily: st.fontFamily,
+                  fontSize: st.fontSize,
+                };
+              };
+              return {
+                title: document.title,
+                viewport: { width: innerWidth, height: innerHeight, scrollWidth: document.documentElement.scrollWidth },
+                headingColors: all('main h1,main h2,main h3,main h4').map(el => getComputedStyle(el).color),
+                pricingCards: all('#pricing .price-card').length,
+                pricingRows: all('#pricing .pricing-row').length,
+                heroNodes: all('.network-node').length,
+                heroNodeSvgs: all('.network-node svg').length,
+                reviewIconSvgs: all('.review-icon svg').length,
+                workspaceCount: all('.workspace').length,
+                workspace: cs('.workspace'),
+                workspaceBefore: cs('.workspace','::before'),
+                workspaceStage: cs('.workspace-stage'),
+                workspacePanels: all('.workspace .workspace-copy, .workspace .workspace-visual').length,
+                mapTransform: cs('.map-grid')?.transform,
+                nav: cs('.navbar'),
+                primaryButton: cs('.button.primary'),
+                priceCard: cs('#pricing .price-card'),
+                priceFeatured: cs('#pricing .price-card.featured'),
+                body: cs('body'),
+                h1: cs('h1'),
+                processRows: all('#process .sequence-row').length,
+                founderCards: all('#about .profile-card,#about .founder-work-card').length,
+                reviewTabs: all('#review [data-review]').length,
+                focusTabs: all('#industries [data-focus]').length,
+              };
+            });
+            results[label] = data;
+            return data;
+          }
+
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            const context = await browser.newContext({ viewport: { width: 1440, height: 1100 }, deviceScaleFactor: 1 });
+            const page = await context.newPage();
+            page.on('console', msg => { if (msg.type() === 'error') results.consoleErrors.push(msg.text()); });
+            page.on('pageerror', err => results.pageErrors.push(String(err)));
+
+            for (let i = 0; i < 30; i++) {
+              await page.goto(url, { waitUntil: 'networkidle', timeout: 45000 });
+              await page.waitForTimeout(900);
+              const ready = await page.evaluate(() => document.querySelectorAll('#pricing .price-card').length === 3 && document.querySelectorAll('.network-node svg').length === 8);
+              if (ready) break;
+              await page.waitForTimeout(5000);
+            }
+
+            const desktop = await inspect(page, 'desktop');
+            await page.screenshot({ path: 'serphic-desktop.png', fullPage: true });
+
+            add('Page title', desktop.title === 'SEO for Plumbing & HVAC Companies | Serphic', desktop.title, 'SEO for Plumbing & HVAC Companies | Serphic');
+            add('No horizontal desktop overflow', desktop.viewport.scrollWidth <= desktop.viewport.width + 1, desktop.viewport, 'scrollWidth <= viewport width');
+            add('Headings use light text', desktop.headingColors.every(c => c === 'rgb(247, 247, 248)' || c === 'rgb(247, 249, 250)'), [...new Set(desktop.headingColors)], 'light Serphic heading color');
+            add('Three pricing cards', desktop.pricingCards === 3, desktop.pricingCards, 3);
+            add('No pricing comparison rows', desktop.pricingRows === 0, desktop.pricingRows, 0);
+            add('Eight hero nodes', desktop.heroNodes === 8, desktop.heroNodes, 8);
+            add('Eight SVG hero icons', desktop.heroNodeSvgs === 8, desktop.heroNodeSvgs, 8);
+            add('Two workspace shells', desktop.workspaceCount === 2, desktop.workspaceCount, 2);
+            add('Workspace outer border 1px', desktop.workspace?.borderWidth === '1px', desktop.workspace?.borderWidth, '1px');
+            add('Workspace outer radius 18px', desktop.workspace?.borderRadius === '18px', desktop.workspace?.borderRadius, '18px');
+            add('Workspace padding 12px', desktop.workspace?.padding === '12px', desktop.workspace?.padding, '12px');
+            add('Workspace pseudo-frame removed', desktop.workspaceBefore?.display === 'none' || desktop.workspaceBefore?.content === 'none', desktop.workspaceBefore, 'display none/content none');
+            add('Workspace stage has no extra border', desktop.workspaceStage?.borderWidth === '0px', desktop.workspaceStage?.borderWidth, '0px');
+            add('Four real workspace panels total', desktop.workspacePanels === 4, desktop.workspacePanels, 4);
+            add('Maps grid is straight', desktop.mapTransform === 'none' || desktop.mapTransform === 'matrix(1, 0, 0, 1, 0, 0)', desktop.mapTransform, 'none');
+            add('Five 90-day rows', desktop.processRows === 5, desktop.processRows, 5);
+            add('Two founder cards', desktop.founderCards === 2, desktop.founderCards, 2);
+            add('Five Search Review tabs', desktop.reviewTabs === 5, desktop.reviewTabs, 5);
+            add('Two industry tabs', desktop.focusTabs === 2, desktop.focusTabs, 2);
+            add('No page errors', results.pageErrors.length === 0, results.pageErrors, []);
+
+            await page.setViewportSize({ width: 390, height: 844 });
+            await page.reload({ waitUntil: 'networkidle' });
+            await page.waitForTimeout(1000);
+            const mobile = await inspect(page, 'mobile');
+            await page.screenshot({ path: 'serphic-mobile.png', fullPage: true });
+            add('No horizontal mobile overflow', mobile.viewport.scrollWidth <= mobile.viewport.width + 1, mobile.viewport, 'scrollWidth <= viewport width');
+            add('Mobile retains three pricing cards', mobile.pricingCards === 3, mobile.pricingCards, 3);
+            add('Mobile retains two workspaces', mobile.workspaceCount === 2, mobile.workspaceCount, 2);
+
+            fs.writeFileSync('qa-results.json', JSON.stringify(results, null, 2));
+            console.log(JSON.stringify(results, null, 2));
+            await browser.close();
+            if (results.assertions.some(a => !a.pass)) process.exitCode = 1;
+          })().catch(err => {
+            console.error(err);
+            process.exit(1);
+          });
+          EOF
+          node /tmp/qa.cjs
+
+      - name: Upload QA artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: serphic-visual-qa
+          path: |
+            serphic-desktop.png
+            serphic-mobile.png
+            qa-results.json
+          if-no-files-found: warn
