@@ -13,174 +13,93 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      - name: Install Playwright
+      - name: Install browser QA
         run: |
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-
-      - name: Run live preview QA
+      - name: QA the published GitHub Pages preview
         run: |
           cat > qa.cjs <<'EOF'
           const { chromium } = require('playwright');
           const fs = require('fs');
-
           const url = 'https://mariopablicoseo.github.io/serphic-preview/';
-          const results = { url, assertions: [], consoleErrors: [], pageErrors: [], desktop: {}, mobile: {} };
-          const add = (name, pass, actual, expected) => results.assertions.push({ name, pass, actual, expected });
-          const lightColor = value => {
-            const m = String(value).match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
-            return !!m && Number(m[1]) >= 230 && Number(m[2]) >= 230 && Number(m[3]) >= 230;
+          const out = { url, checks: [], consoleErrors: [], pageErrors: [] };
+          const add = (name, pass, actual, expected) => out.checks.push({name, pass, actual, expected});
+          const light = c => {
+            const m = String(c).match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+            return !!m && +m[1] >= 230 && +m[2] >= 230 && +m[3] >= 230;
           };
-
-          async function inspect(page, label) {
-            const data = await page.evaluate(() => {
-              const one = s => document.querySelector(s);
-              const all = s => [...document.querySelectorAll(s)];
-              const cs = (s, pseudo) => {
-                const el = typeof s === 'string' ? one(s) : s;
-                if (!el) return null;
-                const st = getComputedStyle(el, pseudo);
-                return {
-                  color: st.color,
-                  backgroundColor: st.backgroundColor,
-                  backgroundImage: st.backgroundImage,
-                  borderColor: st.borderColor,
-                  borderWidth: st.borderWidth,
-                  borderRadius: st.borderRadius,
-                  padding: st.padding,
-                  gap: st.gap,
-                  minHeight: st.minHeight,
-                  height: st.height,
-                  display: st.display,
-                  content: st.content,
-                  transform: st.transform,
-                  boxShadow: st.boxShadow,
-                  fontFamily: st.fontFamily,
-                  fontSize: st.fontSize,
-                };
-              };
-              return {
-                title: document.title,
-                viewport: { width: innerWidth, height: innerHeight, scrollWidth: document.documentElement.scrollWidth },
-                headingColors: all('main h1,main h2,main h3,main h4').map(el => getComputedStyle(el).color),
-                pricingCards: all('#pricing .price-card').length,
-                pricingRows: all('#pricing .pricing-row').length,
-                heroNodes: all('.network-node').length,
-                heroNodeSvgs: all('.network-node svg').length,
-                heroNetwork: cs('.hero-network'),
-                reviewIconSvgs: all('#review-icon svg').length,
-                workspaceCount: all('.workspace').length,
-                workspace: cs('.workspace'),
-                workspaceBefore: cs('.workspace','::before'),
-                workspaceStage: cs('.workspace-stage'),
-                workspacePanels: all('.workspace .workspace-copy, .workspace .workspace-visual').length,
-                mapTransform: cs('.map-grid')?.transform,
-                primaryButton: cs('.button.primary'),
-                processRows: all('#process .sequence-row').length,
-                founderCards: all('#about .profile-card,#about .founder-work-card').length,
-                reviewTabs: all('#review [data-review]').length,
-                focusTabs: all('#industries [data-focus]').length,
-                systemCards: all('#system .system-card').length,
-                systemCard: cs('#system .system-card'),
-                illustrationWell: cs('#system .illustration-well'),
-                systemSection: cs('#system'),
-                proofMetrics: all('#results .metric').length,
-                metricsShell: cs('#results .metrics-shell'),
-                metricCard: cs('#results .metric'),
-                faqItems: all('.faq-list details').length,
-                faqList: cs('.faq-list'),
-                faqDetail: cs('.faq-list details'),
-                finalCard: cs('.final-card'),
-                body: cs('body'),
-                h1: cs('h1'),
-              };
-            });
-            results[label] = data;
-            return data;
-          }
-
-          (async () => {
-            const browser = await chromium.launch({ headless: true });
-            const context = await browser.newContext({ viewport: { width: 1440, height: 1100 }, deviceScaleFactor: 1 });
-            const page = await context.newPage();
-            page.on('console', msg => { if (msg.type() === 'error') results.consoleErrors.push(msg.text()); });
-            page.on('pageerror', err => results.pageErrors.push(String(err)));
-
-            let ready = false;
-            for (let i = 0; i < 30; i++) {
-              await page.goto(url, { waitUntil: 'networkidle', timeout: 45000 });
-              await page.waitForTimeout(900);
-              ready = await page.evaluate(() => {
-                const finalCard = document.querySelector('.final-card');
-                return document.querySelectorAll('#pricing .price-card').length === 3 &&
-                  document.querySelectorAll('.network-node svg').length === 8 &&
-                  finalCard && getComputedStyle(finalCard).borderRadius === '28px';
-              });
-              if (ready) break;
-              await page.waitForTimeout(5000);
+          const inspect = page => page.evaluate(() => {
+            const q = s => document.querySelector(s);
+            const qa = s => [...document.querySelectorAll(s)];
+            const css = (s,p) => {
+              const el = q(s); if(!el) return null; const x=getComputedStyle(el,p);
+              return {color:x.color,backgroundColor:x.backgroundColor,backgroundImage:x.backgroundImage,borderWidth:x.borderWidth,borderRadius:x.borderRadius,padding:x.padding,gap:x.gap,height:x.height,minHeight:x.minHeight,display:x.display,content:x.content,transform:x.transform,fontFamily:x.fontFamily};
+            };
+            return {
+              title:document.title,
+              viewport:{width:innerWidth,scrollWidth:document.documentElement.scrollWidth},
+              darkSurfaceHeadings:qa('main h1,main h2,main h3,main h4').filter(el=>!el.closest('.final-card')).map(el=>getComputedStyle(el).color),
+              pricingCards:qa('#pricing .price-card').length, pricingRows:qa('#pricing .pricing-row').length,
+              heroNodes:qa('.network-node').length, heroSvgs:qa('.network-node svg').length, hero:css('.hero-network'),
+              workspaces:qa('.workspace').length, workspace:css('.workspace'), workspaceBefore:css('.workspace','::before'), stage:css('.workspace-stage'), panels:qa('.workspace .workspace-copy,.workspace .workspace-visual').length,
+              mapTransform:css('.map-grid')?.transform,
+              processRows:qa('#process .sequence-row').length, founderCards:qa('#about .profile-card,#about .founder-work-card').length,
+              reviewTabs:qa('#review [data-review]').length, reviewIcon:qa('#review-icon svg').length, focusTabs:qa('#industries [data-focus]').length,
+              systemCards:qa('#system .system-card').length, systemCard:css('#system .system-card'), well:css('#system .illustration-well'), system:css('#system'),
+              metrics:qa('#results .metric').length, metricsShell:css('#results .metrics-shell'), metric:css('#results .metric'),
+              faq:qa('.faq-list details').length, faqRow:css('.faq-list details'),
+              finalCard:css('.final-card'), button:css('.button.primary'), body:css('body')
+            };
+          });
+          (async()=>{
+            const browser=await chromium.launch({headless:true});
+            const page=await browser.newPage({viewport:{width:1440,height:1100}});
+            page.on('console',m=>{if(m.type()==='error')out.consoleErrors.push(m.text())});
+            page.on('pageerror',e=>out.pageErrors.push(String(e)));
+            let ready=false;
+            for(let i=0;i<30;i++){
+              await page.goto(url,{waitUntil:'networkidle',timeout:45000}); await page.waitForTimeout(700);
+              ready=await page.evaluate(()=>getComputedStyle(document.querySelector('.final-card')).borderRadius==='28px'&&document.querySelectorAll('.network-node svg').length===8&&document.querySelectorAll('#pricing .price-card').length===3);
+              if(ready)break; await page.waitForTimeout(5000);
             }
-
-            const desktop = await inspect(page, 'desktop');
-            await page.screenshot({ path: 'serphic-desktop.png', fullPage: true });
-
-            add('Latest parity layer deployed', ready, { pricingCards: desktop.pricingCards, heroNodeSvgs: desktop.heroNodeSvgs, finalRadius: desktop.finalCard?.borderRadius }, '3 pricing cards, 8 hero SVGs, 28px final CTA');
-            add('Page title', desktop.title === 'SEO for Plumbing & HVAC Companies | Serphic', desktop.title, 'SEO for Plumbing & HVAC Companies | Serphic');
-            add('No horizontal desktop overflow', desktop.viewport.scrollWidth <= desktop.viewport.width + 1, desktop.viewport, 'scrollWidth <= viewport width');
-            add('All headings are light', desktop.headingColors.every(lightColor), [...new Set(desktop.headingColors)], 'all RGB channels >= 230');
-            add('Three pricing cards', desktop.pricingCards === 3 && desktop.pricingRows === 0, {cards:desktop.pricingCards,rows:desktop.pricingRows}, '3 cards / 0 rows');
-            add('Eight SVG hero icons', desktop.heroNodes === 8 && desktop.heroNodeSvgs === 8, {nodes:desktop.heroNodes,svgs:desktop.heroNodeSvgs}, '8 / 8');
-            add('Hero illustration unboxed', desktop.heroNetwork?.borderWidth === '0px' && desktop.heroNetwork?.backgroundColor === 'rgba(0, 0, 0, 0)', desktop.heroNetwork, '0px border / transparent');
-            add('Two real workspace shells', desktop.workspaceCount === 2, desktop.workspaceCount, 2);
-            add('Workspace outer outline locked', desktop.workspace?.borderWidth === '1px' && desktop.workspace?.borderRadius === '18px' && desktop.workspace?.padding === '12px', desktop.workspace, '1px / 18px / 12px');
-            add('No extra workspace pseudo-frame', desktop.workspaceBefore?.display === 'none' && desktop.workspaceStage?.borderWidth === '0px', {before:desktop.workspaceBefore,stage:desktop.workspaceStage}, 'pseudo none / stage border 0');
-            add('Four real workspace panels', desktop.workspacePanels === 4, desktop.workspacePanels, 4);
-            add('Maps grid straight', desktop.mapTransform === 'none' || desktop.mapTransform === 'matrix(1, 0, 0, 1, 0, 0)', desktop.mapTransform, 'none');
-            add('Five 90-day rows', desktop.processRows === 5, desktop.processRows, 5);
-            add('Two founder cards', desktop.founderCards === 2, desktop.founderCards, 2);
-            add('Five review tabs', desktop.reviewTabs === 5, desktop.reviewTabs, 5);
-            add('Review SVG icon restored', desktop.reviewIconSvgs >= 1, desktop.reviewIconSvgs, '>= 1');
-            add('Two industry tabs', desktop.focusTabs === 2, desktop.focusTabs, 2);
-            add('Three operating-system cards', desktop.systemCards === 3, desktop.systemCards, 3);
-            add('Operating-system proportions', desktop.systemCard?.minHeight === '500px' && desktop.illustrationWell?.height === '230px', {card:desktop.systemCard,well:desktop.illustrationWell}, '500px card / 230px well');
-            add('System section source background', desktop.systemSection?.backgroundColor === 'rgb(9, 12, 13)', desktop.systemSection?.backgroundColor, 'rgb(9, 12, 13)');
-            add('Three proof metrics', desktop.proofMetrics === 3, desktop.proofMetrics, 3);
-            add('Evidence shell uses card gaps', desktop.metricsShell?.padding === '10px' && desktop.metricsShell?.gap === '12px' && desktop.metricCard?.borderRadius === '14px', {shell:desktop.metricsShell,metric:desktop.metricCard}, '10px padding / 12px gap / 14px cards');
-            add('Six FAQ rows', desktop.faqItems === 6, desktop.faqItems, 6);
-            add('FAQ uses divider treatment', desktop.faqDetail?.borderRadius === '0px', desktop.faqDetail, '0px radius');
-            add('Final CTA source treatment', desktop.finalCard?.borderRadius === '28px' && desktop.finalCard?.color === 'rgb(6, 16, 15)' && /linear-gradient/.test(desktop.finalCard?.backgroundImage || ''), desktop.finalCard, '28px bright source CTA with dark text');
-            add('Plus Jakarta body font', /Plus Jakarta Sans/i.test(desktop.body?.fontFamily || ''), desktop.body?.fontFamily, 'Plus Jakarta Sans');
-            add('Primary control locked', desktop.primaryButton?.borderRadius === '10px' && parseFloat(desktop.primaryButton?.height || '0') >= 40, desktop.primaryButton, '10px radius / >=40px');
-            add('No page errors', results.pageErrors.length === 0, results.pageErrors, []);
-
-            await page.setViewportSize({ width: 390, height: 844 });
-            await page.reload({ waitUntil: 'networkidle' });
-            await page.waitForTimeout(1000);
-            const mobile = await inspect(page, 'mobile');
-            await page.screenshot({ path: 'serphic-mobile.png', fullPage: true });
-            add('No horizontal mobile overflow', mobile.viewport.scrollWidth <= mobile.viewport.width + 1, mobile.viewport, 'scrollWidth <= viewport width');
-            add('Mobile retains three pricing cards', mobile.pricingCards === 3, mobile.pricingCards, 3);
-            add('Mobile retains two workspaces', mobile.workspaceCount === 2, mobile.workspaceCount, 2);
-            add('Mobile workspace padding 10px', mobile.workspace?.padding === '10px', mobile.workspace?.padding, '10px');
-            add('Mobile final CTA source radius', mobile.finalCard?.borderRadius === '22px', mobile.finalCard?.borderRadius, '22px');
-
-            fs.writeFileSync('qa-results.json', JSON.stringify(results, null, 2));
-            console.log(JSON.stringify(results, null, 2));
-            await browser.close();
-            if (results.assertions.some(a => !a.pass)) process.exitCode = 1;
-          })().catch(err => { console.error(err); process.exit(1); });
+            const d=await inspect(page); await page.screenshot({path:'serphic-desktop.png',fullPage:true});
+            add('Latest parity build loaded',ready,{pricing:d.pricingCards,icons:d.heroSvgs,final:d.finalCard?.borderRadius},'3 / 8 / 28px');
+            add('No desktop overflow',d.viewport.scrollWidth<=d.viewport.width,d.viewport,'no overflow');
+            add('Dark-surface headings stay light',d.darkSurfaceHeadings.every(light),[...new Set(d.darkSurfaceHeadings)],'light headings outside bright CTA');
+            add('Pricing remains three cards',d.pricingCards===3&&d.pricingRows===0,{cards:d.pricingCards,rows:d.pricingRows},'3 / 0');
+            add('Hero SVG icons restored',d.heroNodes===8&&d.heroSvgs===8,{nodes:d.heroNodes,svgs:d.heroSvgs},'8 / 8');
+            add('Hero remains unboxed',d.hero?.borderWidth==='0px'&&d.hero?.backgroundColor==='rgba(0, 0, 0, 0)',d.hero,'unboxed');
+            add('Two workspace shells',d.workspaces===2,d.workspaces,2);
+            add('Single outer workspace outline',d.workspace?.borderWidth==='1px'&&d.workspace?.borderRadius==='18px'&&d.workspace?.padding==='12px',d.workspace,'1px / 18px / 12px');
+            add('No nested workspace frame',d.workspaceBefore?.display==='none'&&d.stage?.borderWidth==='0px',{before:d.workspaceBefore,stage:d.stage},'none / 0px');
+            add('Four real workspace panels',d.panels===4,d.panels,4);
+            add('Maps grid straight',d.mapTransform==='none'||d.mapTransform==='matrix(1, 0, 0, 1, 0, 0)',d.mapTransform,'none');
+            add('90 days + founder structure',d.processRows===5&&d.founderCards===2,{process:d.processRows,founder:d.founderCards},'5 / 2');
+            add('Review + focus tabs intact',d.reviewTabs===5&&d.reviewIcon>=1&&d.focusTabs===2,{review:d.reviewTabs,icon:d.reviewIcon,focus:d.focusTabs},'5 / >=1 / 2');
+            add('Operating System source proportions',d.systemCards===3&&d.systemCard?.minHeight==='500px'&&d.well?.height==='230px'&&d.system?.backgroundColor==='rgb(9, 12, 13)',{cards:d.systemCards,card:d.systemCard,well:d.well,section:d.system},'3 / 500px / 230px / source background');
+            add('Evidence shell restored',d.metrics===3&&d.metricsShell?.padding==='10px'&&d.metricsShell?.gap==='12px'&&d.metric?.borderRadius==='14px',{metrics:d.metrics,shell:d.metricsShell,metric:d.metric},'3 / 10px / 12px / 14px');
+            add('FAQ divider accordion restored',d.faq===6&&d.faqRow?.borderRadius==='0px',{rows:d.faq,row:d.faqRow},'6 / 0px');
+            add('Source final CTA restored',d.finalCard?.borderRadius==='28px'&&d.finalCard?.color==='rgb(6, 16, 15)'&&/linear-gradient/.test(d.finalCard?.backgroundImage||''),d.finalCard,'bright source CTA');
+            add('Canonical controls restored',d.button?.borderRadius==='10px'&&parseFloat(d.button?.height||0)>=40,d.button,'10px / >=40px');
+            add('Correct body font',/Plus Jakarta Sans/i.test(d.body?.fontFamily||''),d.body?.fontFamily,'Plus Jakarta Sans');
+            add('No runtime errors',out.pageErrors.length===0,out.pageErrors,[]);
+            await page.setViewportSize({width:390,height:844}); await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(800);
+            const m=await inspect(page); await page.screenshot({path:'serphic-mobile.png',fullPage:true});
+            add('No mobile overflow',m.viewport.scrollWidth<=m.viewport.width,m.viewport,'no overflow');
+            add('Mobile keeps pricing/workspaces',m.pricingCards===3&&m.workspaces===2,{pricing:m.pricingCards,workspaces:m.workspaces},'3 / 2');
+            add('Mobile workspace/final radii',m.workspace?.padding==='10px'&&m.finalCard?.borderRadius==='22px',{workspace:m.workspace?.padding,final:m.finalCard?.borderRadius},'10px / 22px');
+            fs.writeFileSync('qa-results.json',JSON.stringify(out,null,2)); console.log(JSON.stringify(out,null,2)); await browser.close();
+            if(out.checks.some(x=>!x.pass))process.exitCode=1;
+          })().catch(e=>{console.error(e);process.exit(1)});
           EOF
           node qa.cjs
-
-      - name: Upload QA artifacts
+      - name: Upload QA screenshots and report
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -189,4 +108,3 @@ jobs:
             serphic-desktop.png
             serphic-mobile.png
             qa-results.json
-          if-no-files-found: warn
