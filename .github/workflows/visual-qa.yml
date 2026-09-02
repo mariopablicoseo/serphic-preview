@@ -29,7 +29,7 @@ jobs:
 
       - name: Run live preview QA
         run: |
-          cat > /tmp/qa.cjs <<'EOF'
+          cat > qa.cjs <<'EOF'
           const { chromium } = require('playwright');
           const fs = require('fs');
 
@@ -52,6 +52,8 @@ jobs:
                   borderWidth: st.borderWidth,
                   borderRadius: st.borderRadius,
                   padding: st.padding,
+                  paddingTop: st.paddingTop,
+                  paddingBottom: st.paddingBottom,
                   minHeight: st.minHeight,
                   height: st.height,
                   display: st.display,
@@ -70,6 +72,7 @@ jobs:
                 pricingRows: all('#pricing .pricing-row').length,
                 heroNodes: all('.network-node').length,
                 heroNodeSvgs: all('.network-node svg').length,
+                heroNetwork: cs('.hero-network'),
                 reviewIconSvgs: all('.review-icon svg').length,
                 workspaceCount: all('.workspace').length,
                 workspace: cs('.workspace'),
@@ -87,6 +90,12 @@ jobs:
                 founderCards: all('#about .profile-card,#about .founder-work-card').length,
                 reviewTabs: all('#review [data-review]').length,
                 focusTabs: all('#industries [data-focus]').length,
+                systemCards: all('#system .system-card').length,
+                proofMetrics: all('#results .metric').length,
+                faqItems: all('.faq-item').length,
+                sectionStyle: cs('#system'),
+                navBrandText: one('.brand')?.textContent?.trim() || '',
+                navBrandHasImage: !!one('.brand img'),
               };
             });
             results[label] = data;
@@ -100,10 +109,11 @@ jobs:
             page.on('console', msg => { if (msg.type() === 'error') results.consoleErrors.push(msg.text()); });
             page.on('pageerror', err => results.pageErrors.push(String(err)));
 
+            let ready = false;
             for (let i = 0; i < 30; i++) {
               await page.goto(url, { waitUntil: 'networkidle', timeout: 45000 });
               await page.waitForTimeout(900);
-              const ready = await page.evaluate(() => document.querySelectorAll('#pricing .price-card').length === 3 && document.querySelectorAll('.network-node svg').length === 8);
+              ready = await page.evaluate(() => document.querySelectorAll('#pricing .price-card').length === 3 && document.querySelectorAll('.network-node svg').length === 8);
               if (ready) break;
               await page.waitForTimeout(5000);
             }
@@ -111,6 +121,7 @@ jobs:
             const desktop = await inspect(page, 'desktop');
             await page.screenshot({ path: 'serphic-desktop.png', fullPage: true });
 
+            add('Corrected preview loaded', ready, { pricingCards: desktop.pricingCards, heroNodeSvgs: desktop.heroNodeSvgs }, '3 pricing cards and 8 hero SVGs');
             add('Page title', desktop.title === 'SEO for Plumbing & HVAC Companies | Serphic', desktop.title, 'SEO for Plumbing & HVAC Companies | Serphic');
             add('No horizontal desktop overflow', desktop.viewport.scrollWidth <= desktop.viewport.width + 1, desktop.viewport, 'scrollWidth <= viewport width');
             add('Headings use light text', desktop.headingColors.every(c => c === 'rgb(247, 247, 248)' || c === 'rgb(247, 249, 250)'), [...new Set(desktop.headingColors)], 'light Serphic heading color');
@@ -118,6 +129,7 @@ jobs:
             add('No pricing comparison rows', desktop.pricingRows === 0, desktop.pricingRows, 0);
             add('Eight hero nodes', desktop.heroNodes === 8, desktop.heroNodes, 8);
             add('Eight SVG hero icons', desktop.heroNodeSvgs === 8, desktop.heroNodeSvgs, 8);
+            add('Hero illustration is unboxed', desktop.heroNetwork?.borderWidth === '0px' && desktop.heroNetwork?.backgroundColor === 'rgba(0, 0, 0, 0)', desktop.heroNetwork, '0px border and transparent background');
             add('Two workspace shells', desktop.workspaceCount === 2, desktop.workspaceCount, 2);
             add('Workspace outer border 1px', desktop.workspace?.borderWidth === '1px', desktop.workspace?.borderWidth, '1px');
             add('Workspace outer radius 18px', desktop.workspace?.borderRadius === '18px', desktop.workspace?.borderRadius, '18px');
@@ -130,6 +142,12 @@ jobs:
             add('Two founder cards', desktop.founderCards === 2, desktop.founderCards, 2);
             add('Five Search Review tabs', desktop.reviewTabs === 5, desktop.reviewTabs, 5);
             add('Two industry tabs', desktop.focusTabs === 2, desktop.focusTabs, 2);
+            add('Three operating-system cards', desktop.systemCards === 3, desktop.systemCards, 3);
+            add('Three proof metrics', desktop.proofMetrics === 3, desktop.proofMetrics, 3);
+            add('Six FAQ items', desktop.faqItems === 6, desktop.faqItems, 6);
+            add('Plus Jakarta body font', /Plus Jakarta Sans/i.test(desktop.body?.fontFamily || ''), desktop.body?.fontFamily, 'Plus Jakarta Sans');
+            add('Primary control radius 10px', desktop.primaryButton?.borderRadius === '10px', desktop.primaryButton?.borderRadius, '10px');
+            add('Primary control is at least 40px', parseFloat(desktop.primaryButton?.height || '0') >= 40, desktop.primaryButton?.height, '>= 40px');
             add('No page errors', results.pageErrors.length === 0, results.pageErrors, []);
 
             await page.setViewportSize({ width: 390, height: 844 });
@@ -140,6 +158,7 @@ jobs:
             add('No horizontal mobile overflow', mobile.viewport.scrollWidth <= mobile.viewport.width + 1, mobile.viewport, 'scrollWidth <= viewport width');
             add('Mobile retains three pricing cards', mobile.pricingCards === 3, mobile.pricingCards, 3);
             add('Mobile retains two workspaces', mobile.workspaceCount === 2, mobile.workspaceCount, 2);
+            add('Mobile workspace padding 10px', mobile.workspace?.padding === '10px', mobile.workspace?.padding, '10px');
 
             fs.writeFileSync('qa-results.json', JSON.stringify(results, null, 2));
             console.log(JSON.stringify(results, null, 2));
@@ -150,7 +169,7 @@ jobs:
             process.exit(1);
           });
           EOF
-          node /tmp/qa.cjs
+          node qa.cjs
 
       - name: Upload QA artifacts
         if: always()
