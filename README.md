@@ -6,10 +6,16 @@ This repository intentionally contains only browser-safe static preview files. I
 
 ## Preview
 
-GitHub Pages URL after Pages is enabled with GitHub Actions:
+GitHub Pages URL after Pages is enabled from the `main` branch `/ (root)`:
 
 https://mariopablicoseo.github.io/serphic-preview/
 
+## Publishing
+
+Repository Settings → Pages → Build and deployment → Source: **Deploy from a branch** → Branch: **main** → Folder: **/ (root)** → Save.
+
+No Vercel build and no GitHub Actions build are required for this preview.
+
 ## Source of truth
 
-The private implementation remains in `mariopablicoseo/my-agency-site`. This repository is for visual QA only.
+The private implementation remains in `mariopablicoseo/my-agency-site`. This repository is a sanitized visual-QA mirror only.
